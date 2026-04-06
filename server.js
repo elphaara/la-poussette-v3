@@ -3,8 +3,11 @@ import { PousseJeu } from './src/Game.js';
 
 const server = Server({
   games: [PousseJeu],
-  // On autorise tout le monde (Origins.ALL) pour que le tunnel Serveo laisse passer ton ami
-  origins: [Origins.ALL], 
+  origins: [
+    'http://localhost:5173',
+    'https://la-poussette-v3.onrender.com',
+    /.*\.ngrok-free\.dev$/ // Autorise tous les liens Ngrok
+  ],
 });
 
 const PORT = process.env.PORT || 8000;
