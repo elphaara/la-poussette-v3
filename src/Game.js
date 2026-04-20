@@ -4,7 +4,8 @@ export const PousseJeu = {
   name: 'poussette',
   minPlayers: 2,
   maxPlayers: 2,
-  // Configuration initiale [cite: 2, 4, 5]
+  
+  // Configuration initiale : 5x5 cases, Blancs ligne 1, Noirs ligne 5 [cite: 2, 4, 5]
   setup: () => ({
     cells: [
       'B', 'B', 'B', 'B', 'B', 
@@ -16,7 +17,7 @@ export const PousseJeu = {
     history: null,
   }),
 
-  // Gestion des tours et règle de la poussée inverse [cite: 16, 28]
+  // Règle de non-répétition (Ko) [cite: 28]
   turn: {
     minMoves: 1,
     maxMoves: 1,
@@ -25,21 +26,29 @@ export const PousseJeu = {
   },
 
   moves: {
-    // Actions de déplacement et de poussée [cite: 17, 20]
     playAction: ({ G, ctx }, from, to) => {
       if (!G.cells[from]) return INVALID_MOVE;
       const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
       if (!G.cells[from].startsWith(myColor)) return INVALID_MOVE;
       
       const isPromoted = G.cells[from].includes('P');
-      const dist = getDistance(from, to);
       const diffX = (to % 5) - (from % 5);
       const diffY = Math.floor(to / 5) - Math.floor(from / 5);
+      const absX = Math.abs(diffX);
+      const absY = Math.abs(diffY);
+      
+      // --- SÉCURITÉ ANTI-CAVALIER ---
+      // Un mouvement est valide UNIQUEMENT s'il est sur l'une des 8 directions (8 directions) [cite: 18, 19]
+      // Cela signifie : soit absX == absY (diagonal), soit l'un des deux est 0 (orthogonal).
+      const isEightDirections = (absX === absY) || (diffX === 0) || (diffY === 0);
+      if (!isEightDirections) return INVALID_MOVE;
+
+      const dist = Math.max(absX, absY);
       const dirX = Math.sign(diffX);
       const dirY = Math.sign(diffY);
       const opponent = ctx.currentPlayer === '0' ? 'N' : 'B';
 
-      // Validation des distances [cite: 18, 19]
+      // Validation des distances : 1 case (standard) ou jusqu'à 2 (promu) [cite: 18, 19]
       if (dist > 2 || (dist === 2 && !isPromoted)) return INVALID_MOVE;
       const midPos = dist === 2 ? getTargetPos(from, dirX, dirY, 1) : null;
 
@@ -52,21 +61,21 @@ export const PousseJeu = {
         executePush(nextCells, from, to, victimTarget);
       }
       
-      // 2. Poussée de 2 cases (Promu) [cite: 26]
+      // 2. Poussée de 2 cases (Promu adjacent à l'adversaire) [cite: 26]
       else if (dist === 2 && G.cells[to] === null && G.cells[midPos] && G.cells[midPos].startsWith(opponent)) {
         const victimTarget = getTargetPos(midPos, dirX, dirY, 2);
         if (!isOffBoard(victimTarget) && G.cells[victimTarget] !== null) return INVALID_MOVE;
         executePush(nextCells, from, to, victimTarget, midPos);
       }
 
-      // 3. Élan (Promu) [cite: 27]
+      // 3. Élan (Promu avec case vide avant l'adversaire) [cite: 27]
       else if (dist === 2 && G.cells[to] && G.cells[to].startsWith(opponent) && G.cells[midPos] === null) {
         const victimTarget = getTargetPos(to, dirX, dirY, 1);
         if (!isOffBoard(victimTarget) && G.cells[victimTarget] !== null) return INVALID_MOVE;
         executePush(nextCells, from, to, victimTarget);
       }
 
-      // 4. Déplacement simple
+      // 4. Déplacement simple (vers case vide) [cite: 18, 19]
       else if (G.cells[to] === null && (dist === 1 || (dist === 2 && G.cells[midPos] === null))) {
         nextCells[to] = nextCells[from];
         nextCells[from] = null;
@@ -74,7 +83,7 @@ export const PousseJeu = {
       }
       else return INVALID_MOVE;
 
-      // Test de la règle de la poussée inverse (Ko) [cite: 28]
+      // Vérification de la poussée inverse interdite [cite: 28]
       if (G.history && nextCells.every((val, index) => val === G.history[index])) {
         return INVALID_MOVE;
       }
@@ -82,7 +91,7 @@ export const PousseJeu = {
       G.cells = nextCells;
     },
 
-    // Action de capture manuelle [cite: 29]
+    // Action de capture par compression [cite: 29, 31, 32, 33, 34]
     compressPion: ({ G, ctx }, victimPos) => {
       const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
       if (!isCompressed(G, victimPos, myColor)) return INVALID_MOVE;
@@ -90,14 +99,14 @@ export const PousseJeu = {
     }
   },
 
-  // Condition de victoire [cite: 8]
+  // Condition de victoire par élimination totale [cite: 8]
   endIf: ({ G }) => {
     if (!G.cells.some(c => c && c.startsWith('N'))) return { winner: 'Blancs' };
     if (!G.cells.some(c => c && c.startsWith('B'))) return { winner: 'Noirs' };
   },
 };
 
-// --- LOGIQUE MATHÉMATIQUE ---
+// --- FONCTIONS UTILITAIRES ---
 
 function executePush(cells, from, to, victimTo, mid = null) {
   const attacker = cells[from];
@@ -110,10 +119,6 @@ function executePush(cells, from, to, victimTo, mid = null) {
   if (!isOffBoard(victimTo)) checkPromotion(cells, victimTo);
 }
 
-function getDistance(f, t) {
-  return Math.max(Math.abs((f % 5) - (t % 5)), Math.abs(Math.floor(f / 5) - Math.floor(t / 5)));
-}
-
 function getTargetPos(pos, dx, dy, dist) {
   const x = (pos % 5) + dx * dist;
   const y = Math.floor(pos / 5) + dy * dist;
@@ -122,9 +127,9 @@ function getTargetPos(pos, dx, dy, dist) {
 
 function isOffBoard(pos) { return pos === -1; }
 
+// Système de promotion [cite: 11, 12, 13]
 function checkPromotion(cells, pos) {
   const row = Math.floor(pos / 5);
-  // Promotion ligne 5 pour Blancs, ligne 1 pour Noirs [cite: 11, 12, 13]
   if (cells[pos] === 'B' && row === 4) cells[pos] = 'BP';
   if (cells[pos] === 'N' && row === 0) cells[pos] = 'NP';
 }
@@ -137,7 +142,7 @@ function isCompressed(G, v, p) {
     const target = getAt(G, x+dx, y+dy);
     return target && target.startsWith(p);
   };
-  // Sandwich et Y [cite: 31, 32, 33, 34]
+  // Sandwich et configurations en Y [cite: 31, 32, 33, 34]
   const sandwich = [...ortho, ...diag].some(([dx, dy]) => check(dx, dy) && check(-dx, -dy));
   const configA = ortho.some(([ox, oy]) => check(ox, oy) && diag.filter(([dx, dy]) => check(dx, dy)).length >= 2);
   const configB = diag.some(([dx, dy]) => check(dx, dy) && ortho.filter(([ox, oy]) => check(ox, oy)).length >= 2);
