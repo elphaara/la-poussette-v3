@@ -14,7 +14,8 @@ export const PousseJeu = {
       'N', 'N', 'N', 'N', 'N', 
     ],
     history: null,
-    timer: [600, 600], // 10 minutes
+    timer: [600, 600],
+    gameStarted: false, // <-- Le nouvel interrupteur
     lastTimestamp: Date.now(),
   }),
 
@@ -22,8 +23,10 @@ export const PousseJeu = {
     minMoves: 1,
     maxMoves: 1,
     onBegin: ({ G }) => { 
-      // On synchronise le début du tour pour le calcul du temps
-      G.lastTimestamp = Date.now();
+      // On ne met à jour le début du chrono que si le jeu a commencé
+      if (G.gameStarted) {
+        G.lastTimestamp = Date.now();
+      }
       G.preMoveState = [...G.cells]; 
     },
     onEnd: ({ G }) => {
@@ -33,12 +36,10 @@ export const PousseJeu = {
 
   moves: {
     playAction: ({ G, ctx }, from, to) => {
-      // 1. Calcul immédiat du temps consommé
       const now = Date.now();
       const player = parseInt(ctx.currentPlayer);
-      const elapsed = Math.floor((now - G.lastTimestamp) / 1000);
 
-      // 2. Vérifications de validité du coup
+      // --- LOGIQUE DE VALIDATION DU MOUVEMENT (Inchangée) ---
       if (!G.cells[from]) return INVALID_MOVE;
       const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
       if (!G.cells[from].startsWith(myColor)) return INVALID_MOVE;
@@ -62,7 +63,6 @@ export const PousseJeu = {
 
       let nextCells = [...G.cells];
 
-      // Logique des mouvements
       if (dist === 1 && G.cells[to] && G.cells[to].startsWith(opponent)) {
         const victimTarget = getTargetPos(to, dirX, dirY, 1);
         if (!isOffBoard(victimTarget) && G.cells[victimTarget] !== null) return INVALID_MOVE;
@@ -89,11 +89,20 @@ export const PousseJeu = {
         return INVALID_MOVE;
       }
 
-      // --- SI LE COUP EST VALIDE : MISE À JOUR DU TIMER ---
+      // --- LOGIQUE DU TIMER MODIFIÉE ---
+      if (!G.gameStarted) {
+        // C'est le tout premier coup (les Blancs jouent)
+        G.gameStarted = true;
+        G.timer[player] += 5; // On donne juste le bonus sans retirer de temps
+      } else {
+        // Le jeu est déjà lancé
+        const elapsed = Math.floor((now - G.lastTimestamp) / 1000);
+        G.timer[player] -= elapsed;
+        G.timer[player] += 5;
+      }
+
       G.cells = nextCells;
-      G.timer[player] -= elapsed;
-      G.timer[player] += 5; // Bonus de 5 secondes 🚀
-      G.lastTimestamp = now; // On reset pour le prochain joueur
+      G.lastTimestamp = Date.now(); // On relance le chrono pour le joueur suivant
     },
 
     compressPion: ({ G, ctx }, victimPos) => {
@@ -111,20 +120,17 @@ export const PousseJeu = {
   },
 };
 
-// Fonctions utilitaires (Inchangées)
+// Fonctions utilitaires inchangées
 function executePush(cells, from, to, victimTo, mid = null) {
-  const attacker = cells[from];
-  const victim = cells[mid || to];
-  cells[from] = null;
-  cells[mid || to] = null;
+  const attacker = cells[from]; const victim = cells[mid || to];
+  cells[from] = null; cells[mid || to] = null;
   if (!isOffBoard(victimTo)) cells[victimTo] = victim;
   cells[to] = attacker;
   checkPromotion(cells, to);
   if (!isOffBoard(victimTo)) checkPromotion(cells, victimTo);
 }
 function getTargetPos(pos, dx, dy, dist) {
-  const x = (pos % 5) + dx * dist;
-  const y = Math.floor(pos / 5) + dy * dist;
+  const x = (pos % 5) + dx * dist; const y = Math.floor(pos / 5) + dy * dist;
   return (x < 0 || x > 4 || y < 0 || y > 4) ? -1 : y * 5 + x;
 }
 function isOffBoard(pos) { return pos === -1; }
