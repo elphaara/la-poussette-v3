@@ -6,16 +6,10 @@ export const PousseJeu = {
   maxPlayers: 2,
   
   setup: () => ({
-    cells: [
-      'B', 'B', 'B', 'B', 'B', 
-      null, null, null, null, null,
-      null, null, null, null, null,
-      null, null, null, null, null,
-      'N', 'N', 'N', 'N', 'N', 
-    ],
+    cells: Array(25).fill(null).map((_, i) => (i < 5 ? 'B' : i > 19 ? 'N' : null)),
     history: null,
     timer: [600, 600],
-    gameStarted: false, // <-- Le nouvel interrupteur
+    gameStarted: false,
     lastTimestamp: Date.now(),
   }),
 
@@ -23,7 +17,6 @@ export const PousseJeu = {
     minMoves: 1,
     maxMoves: 1,
     onBegin: ({ G }) => { 
-      // On ne met à jour le début du chrono que si le jeu a commencé
       if (G.gameStarted) {
         G.lastTimestamp = Date.now();
       }
@@ -39,7 +32,6 @@ export const PousseJeu = {
       const now = Date.now();
       const player = parseInt(ctx.currentPlayer);
 
-      // --- LOGIQUE DE VALIDATION DU MOUVEMENT (Inchangée) ---
       if (!G.cells[from]) return INVALID_MOVE;
       const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
       if (!G.cells[from].startsWith(myColor)) return INVALID_MOVE;
@@ -85,24 +77,20 @@ export const PousseJeu = {
       }
       else return INVALID_MOVE;
 
-      if (G.history && nextCells.every((val, index) => val === G.history[index])) {
-        return INVALID_MOVE;
-      }
+      if (G.history && nextCells.every((val, index) => val === G.history[index])) return INVALID_MOVE;
 
-      // --- LOGIQUE DU TIMER MODIFIÉE ---
+      // --- TIMER +5s ---
       if (!G.gameStarted) {
-        // C'est le tout premier coup (les Blancs jouent)
         G.gameStarted = true;
-        G.timer[player] += 5; // On donne juste le bonus sans retirer de temps
+        G.timer[player] += 5;
       } else {
-        // Le jeu est déjà lancé
         const elapsed = Math.floor((now - G.lastTimestamp) / 1000);
         G.timer[player] -= elapsed;
         G.timer[player] += 5;
       }
 
       G.cells = nextCells;
-      G.lastTimestamp = Date.now(); // On relance le chrono pour le joueur suivant
+      G.lastTimestamp = Date.now();
     },
 
     compressPion: ({ G, ctx }, victimPos) => {
@@ -120,7 +108,7 @@ export const PousseJeu = {
   },
 };
 
-// Fonctions utilitaires inchangées
+// Fonctions utilitaires
 function executePush(cells, from, to, victimTo, mid = null) {
   const attacker = cells[from]; const victim = cells[mid || to];
   cells[from] = null; cells[mid || to] = null;
