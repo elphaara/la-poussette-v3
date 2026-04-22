@@ -6,7 +6,7 @@ export const PousseJeu = {
   maxPlayers: 2,
   
   setup: () => ({
-    cells: Array(25).fill(null).map((_, i) => (i < 5 ? 'B' : i > 19 ? 'N' : null)),
+    cells: Array(25).fill(null).map((_, i) => (i < 5 ? 'B' : i > 19 ? 'N' : null)), // Plateau 5x5 [cite: 2, 4, 5]
     history: null,
     timer: [600, 600],
     gameStarted: false,
@@ -17,14 +17,10 @@ export const PousseJeu = {
     minMoves: 1,
     maxMoves: 1,
     onBegin: ({ G }) => { 
-      if (G.gameStarted) {
-        G.lastTimestamp = Date.now();
-      }
+      if (G.gameStarted) G.lastTimestamp = Date.now();
       G.preMoveState = [...G.cells]; 
     },
-    onEnd: ({ G }) => {
-      G.history = [...G.preMoveState]; 
-    }
+    onEnd: ({ G }) => { G.history = [...G.preMoveState]; }
   },
 
   moves: {
@@ -42,6 +38,7 @@ export const PousseJeu = {
       const absX = Math.abs(diffX);
       const absY = Math.abs(diffY);
       
+      // 8 directions possibles [cite: 18, 19]
       const isEightDirections = (absX === absY) || (diffX === 0) || (diffY === 0);
       if (!isEightDirections) return INVALID_MOVE;
 
@@ -55,6 +52,7 @@ export const PousseJeu = {
 
       let nextCells = [...G.cells];
 
+      // --- LOGIQUE DES POUSSÉES [cite: 20-27] ---
       if (dist === 1 && G.cells[to] && G.cells[to].startsWith(opponent)) {
         const victimTarget = getTargetPos(to, dirX, dirY, 1);
         if (!isOffBoard(victimTarget) && G.cells[victimTarget] !== null) return INVALID_MOVE;
@@ -77,9 +75,10 @@ export const PousseJeu = {
       }
       else return INVALID_MOVE;
 
+      // Interdiction de poussée inverse / répétition [cite: 28, 9]
       if (G.history && nextCells.every((val, index) => val === G.history[index])) return INVALID_MOVE;
 
-      // LOGIQUE DU TIMER
+      // TIMER +5s
       if (!G.gameStarted) {
         G.gameStarted = true;
         G.timer[player] += 5;
@@ -97,7 +96,6 @@ export const PousseJeu = {
       const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
       if (!isCompressed(G, victimPos, myColor)) return INVALID_MOVE;
       
-      // Si compressé, on retire le pion et on ajoute 5s de bonus
       G.cells[victimPos] = null;
       const player = parseInt(ctx.currentPlayer);
       G.timer[player] += 5;
@@ -107,12 +105,13 @@ export const PousseJeu = {
   endIf: ({ G }) => {
     if (G.timer[0] <= 0) return { winner: 'Noirs' };
     if (G.timer[1] <= 0) return { winner: 'Blancs' };
-    if (!G.cells.some(c => c && c.startsWith('N'))) return { winner: 'Blancs' };
+    if (!G.cells.some(c => c && c.startsWith('N'))) return { winner: 'Blancs' }; // Élimination totale [cite: 8]
     if (!G.cells.some(c => c && c.startsWith('B'))) return { winner: 'Noirs' };
   },
 };
 
-// Fonctions utilitaires
+// --- FONCTIONS UTILITAIRES ---
+
 function executePush(cells, from, to, victimTo, mid = null) {
   const attacker = cells[from]; const victim = cells[mid || to];
   cells[from] = null; cells[mid || to] = null;
@@ -121,29 +120,45 @@ function executePush(cells, from, to, victimTo, mid = null) {
   checkPromotion(cells, to);
   if (!isOffBoard(victimTo)) checkPromotion(cells, victimTo);
 }
+
 function getTargetPos(pos, dx, dy, dist) {
   const x = (pos % 5) + dx * dist; const y = Math.floor(pos / 5) + dy * dist;
   return (x < 0 || x > 4 || y < 0 || y > 4) ? -1 : y * 5 + x;
 }
+
 function isOffBoard(pos) { return pos === -1; }
+
 function checkPromotion(cells, pos) {
   const row = Math.floor(pos / 5);
-  if (cells[pos] === 'B' && row === 4) cells[pos] = 'BP';
-  if (cells[pos] === 'N' && row === 0) cells[pos] = 'NP';
+  if (cells[pos] === 'B' && row === 4) cells[pos] = 'BP'; // Promotion ligne 5 [cite: 12]
+  if (cells[pos] === 'N' && row === 0) cells[pos] = 'NP'; // Promotion ligne 1 [cite: 13]
 }
+
 function isCompressed(G, v, p) {
   const x = v % 5; const y = Math.floor(v / 5);
-  const ortho = [[1,0], [-1,0], [0,1], [0,-1]];
-  const diag = [[1,1], [1,-1], [-1,1], [-1,-1]];
   const check = (dx, dy) => {
-    const target = getAt(G, x+dx, y+dy);
+    const target = getAt(G, x + dx, y + dy);
     return target && target.startsWith(p);
   };
-  const sandwich = [...ortho, ...diag].some(([dx, dy]) => check(dx, dy) && check(-dx, -dy));
-  const configA = ortho.some(([ox, oy]) => check(ox, oy) && diag.filter(([dx, dy]) => check(dx, dy)).length >= 2);
-  const configB = diag.some(([dx, dy]) => check(dx, dy) && ortho.filter(([ox, oy]) => check(ox, oy)).length >= 2);
+
+  // 1. En sandwich (2 pions opposés) [cite: 31]
+  const sandwich = [[1,0], [0,1], [1,1], [1,-1]].some(([dx, dy]) => check(dx, dy) && check(-dx, -dy));
+
+  // 2. Configuration A : 1 orthogonal + 2 diagonaux opposés 
+  const configA = [
+    { o: [0, 1], d: [[1,-1], [-1,-1]] }, { o: [0, -1], d: [[1,1], [-1,1]] },
+    { o: [1, 0], d: [[-1,1], [-1,-1]] }, { o: [-1, 0], d: [[1,1], [1,-1]] }
+  ].some(p => check(p.o[0], p.o[1]) && check(p.d[0][0], p.d[0][1]) && check(p.d[1][0], p.d[1][1]));
+
+  // 3. Configuration B : 1 diagonal + 2 orthogonaux opposés [cite: 34]
+  const configB = [
+    { d: [1, 1], o: [[0,-1], [-1,0]] }, { d: [-1, 1], o: [[0,-1], [1,0]] },
+    { d: [1, -1], o: [[0,1], [-1,0]] }, { d: [-1, -1], o: [[0,1], [1,0]] }
+  ].some(p => check(p.d[0], p.d[1]) && check(p.o[0][0], p.o[0][1]) && check(p.o[1][0], p.o[1][1]));
+
   return sandwich || configA || configB;
 }
+
 function getAt(G, x, y) {
   if (x < 0 || x > 4 || y < 0 || y > 4) return null;
   return G.cells[y * 5 + x];
