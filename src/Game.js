@@ -10,32 +10,23 @@ export const PousseJeu = {
     history: null,
     timer: [600, 600],
     gameStarted: false,
-    isAI: false, // <-- Mode IA désactivé par défaut (pour le mode en ligne)
+    gameMode: 'undecided', // 'solo' ou 'online'
     lastTimestamp: Date.now(),
   }),
 
-  turn: {
-    minMoves: 1,
-    maxMoves: 1,
-    onBegin: ({ G }) => { 
-      if (G.gameStarted && !G.isAI) G.lastTimestamp = Date.now();
-      G.preMoveState = [...G.cells]; 
-    },
-    onEnd: ({ G }) => { G.history = [...G.preMoveState]; }
-  },
-
   moves: {
-    // Action pour activer l'IA et couper le timer
-    toggleAI: ({ G }) => {
-      G.isAI = true;
-      G.gameStarted = true; // On bypass l'attente du premier coup
+    // Action pour choisir le mode au tout début
+    setGameMode: ({ G }, mode) => {
+      if (G.gameMode === 'undecided') {
+        G.gameMode = mode;
+      }
     },
 
     playAction: ({ G, ctx }, from, to) => {
       const now = Date.now();
       const player = parseInt(ctx.currentPlayer);
 
-      // --- LOGIQUE DE VALIDATION (Tes 160 lignes de règles) ---
+      // --- LOGIQUE DE VALIDATION ---
       if (!G.cells[from]) return INVALID_MOVE;
       const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
       if (!G.cells[from].startsWith(myColor)) return INVALID_MOVE;
@@ -46,8 +37,7 @@ export const PousseJeu = {
       const absX = Math.abs(diffX);
       const absY = Math.abs(diffY);
       
-      if (!( (absX === absY) || (diffX === 0) || (diffY === 0) )) return INVALID_MOVE;
-
+      if (!((absX === absY) || (diffX === 0) || (diffY === 0))) return INVALID_MOVE;
       const dist = Math.max(absX, absY);
       const dirX = Math.sign(diffX);
       const dirY = Math.sign(diffY);
@@ -82,8 +72,8 @@ export const PousseJeu = {
 
       if (G.history && nextCells.every((val, index) => val === G.history[index])) return INVALID_MOVE;
 
-      // --- GESTION DU TIMER (Uniquement si pas en mode IA) ---
-      if (!G.isAI) {
+      // --- GESTION DU TIMER (Uniquement en mode Online) ---
+      if (G.gameMode === 'online') {
         if (!G.gameStarted) {
           G.gameStarted = true;
           G.timer[player] += 5;
@@ -92,10 +82,49 @@ export const PousseJeu = {
           G.timer[player] -= elapsed;
           G.timer[player] += 5;
         }
+      } else {
+        G.gameStarted = true; // En solo, on s'en fiche
       }
 
       G.cells = nextCells;
       G.lastTimestamp = Date.now();
+    },
+
+    // Moteur IA simplifié
+    requestAIMove: ({ G, ctx, events }) => {
+      if (G.gameMode !== 'solo') return;
+      const player = parseInt(ctx.currentPlayer);
+      const myColor = player === 0 ? 'B' : 'N';
+      const allMoves = [];
+
+      for (let i = 0; i < 25; i++) {
+        if (G.cells[i] && G.cells[i].startsWith(myColor)) {
+          const isP = G.cells[i].includes('P');
+          const range = isP ? [1, 2] : [1];
+          const dirs = [[1,0], [-1,0], [0,1], [0,-1], [1,1], [1,-1], [-1,1], [-1,-1]];
+          dirs.forEach(([dx, dy]) => {
+            range.forEach(d => {
+              const tx = (i % 5) + dx * d;
+              const ty = Math.floor(i / 5) + dy * d;
+              if (tx >= 0 && tx < 5 && ty >= 0 && ty < 5) allMoves.push({ from: i, to: ty * 5 + tx });
+            });
+          });
+        }
+      }
+
+      let bestMove = null;
+      let bestScore = -Infinity;
+      allMoves.forEach(m => {
+        let score = Math.random() * 5;
+        const target = G.cells[m.to];
+        if (target && target.startsWith(myColor === 'B' ? 'N' : 'B')) score += 20;
+        if (score > bestScore) { bestScore = score; bestMove = m; }
+      });
+
+      if (bestMove) {
+        const res = PousseJeu.moves.playAction({ G, ctx }, bestMove.from, bestMove.to);
+        if (res !== INVALID_MOVE) events.endTurn();
+      }
     },
 
     compressPion: ({ G, ctx }, v) => {
@@ -105,35 +134,8 @@ export const PousseJeu = {
     }
   },
 
-  // --- L'IA (MCTS) ---
-  ai: {
-    enumerate: (G, ctx) => {
-      const moves = [];
-      const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
-      const isPromoted = (p) => p.includes('P');
-
-      for (let i = 0; i < 25; i++) {
-        if (G.cells[i] && G.cells[i].startsWith(myColor)) {
-          const dists = isPromoted(G.cells[i]) ? [1, 2] : [1];
-          const dirs = [[1,0], [-1,0], [0,1], [0,-1], [1,1], [1,-1], [-1,1], [-1,-1]];
-          
-          dirs.forEach(([dx, dy]) => {
-            dists.forEach(d => {
-              const x = (i % 5) + dx * d;
-              const y = Math.floor(i / 5) + dy * d;
-              if (x >= 0 && x < 5 && y >= 0 && y < 5) {
-                moves.push({ move: 'playAction', args: [i, y * 5 + x] });
-              }
-            });
-          });
-        }
-      }
-      return moves;
-    }
-  },
-
   endIf: ({ G }) => {
-    if (!G.isAI) {
+    if (G.gameMode === 'online') {
       if (G.timer[0] <= 0) return { winner: 'Noirs' };
       if (G.timer[1] <= 0) return { winner: 'Blancs' };
     }
@@ -142,7 +144,7 @@ export const PousseJeu = {
   },
 };
 
-// Fonctions utilitaires (executePush, getTargetPos, isCompressed, etc. - GARDE LES TIENNES ICI)
+// Utilitaires
 function executePush(cells, from, to, vTo, mid = null) {
   const atk = cells[from]; const vic = cells[mid || to];
   cells[from] = null; cells[mid || to] = null;
@@ -166,8 +168,7 @@ function isCompressed(G, v, p) {
   const check = (dx, dy) => {
     const nx = x+dx; const ny = y+dy;
     if (nx<0||nx>4||ny<0||ny>4) return null;
-    const t = G.cells[ny*5+nx];
-    return t && t.startsWith(p);
+    const t = G.cells[ny*5+nx]; return t && t.startsWith(p);
   };
   const ortho = [[1,0], [-1,0], [0,1], [0,-1]];
   const diag = [[1,1], [1,-1], [-1,1], [-1,-1]];
