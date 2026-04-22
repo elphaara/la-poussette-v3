@@ -1,104 +1,137 @@
-import React, { useState, useEffect } from 'react'; //
+import React, { useState, useEffect } from 'react';
 
-export function PousseBoard({ ctx, G, moves }) {
+export const PousseBoard = ({ ctx, G, moves, playerID }) => {
   const [selected, setSelected] = useState(null);
-  const [actionMode, setActionMode] = useState('move');
+  const isFlipped = playerID === '1'; 
 
-  // NOUVEAU : Remet l'action par défaut ('move') au début de CHAQUE tour
+  // --- LOGIQUE DU TIMER VISUEL ---
+  // Initialisation sécurisée
+  const [localTimes, setLocalTimes] = useState(G.timer || [600, 600]);
+
   useEffect(() => {
-    // Cette fonction s'exécute quand ctx.turn change
-    setActionMode('move');
-    setSelected(null); // On désélectionne aussi par précaution
-  }, [ctx.turn]); // Surveillance du numéro de tour
+    // Dès que le serveur envoie un nouveau G.timer, on écrase le temps local
+    if (G.timer) {
+      setLocalTimes([...G.timer]);
+    }
+  }, [G.timer]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLocalTimes(prev => {
+        if (!prev) return [600, 600];
+        const newTimes = [...prev];
+        const active = parseInt(ctx.currentPlayer);
+        if (newTimes[active] > 0 && !ctx.gameover) {
+          newTimes[active] -= 1;
+        }
+        return newTimes;
+      });
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, [ctx.currentPlayer, ctx.gameover]);
+
+  const formatTime = (seconds) => {
+    if (isNaN(seconds) || seconds === null) return "10:00";
+    const mins = Math.floor(Math.max(0, seconds) / 60);
+    const secs = Math.max(0, seconds) % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
 
   const onClick = (id) => {
-    const myPawn = ctx.currentPlayer === '0' ? 'B' : 'N';
-    const opponent = ctx.currentPlayer === '0' ? 'N' : 'B';
-
-    // Mode COMPRESSION (Action manuelle)
-    if (actionMode === 'compress') {
-      if (G.cells[id] && G.cells[id].startsWith(opponent)) {
-        moves.compressPion(id); // Action unique : le tour s'arrêtera ici
-      }
-      return; // On arrête là pour cette action
-    }
-
-    // Mode NORMAL (Sélection -> Mouvement/Poussée)
     if (selected === null) {
-      if (G.cells[id] && G.cells[id].startsWith(myPawn)) setSelected(id);
+      const piece = G.cells[id];
+      const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
+      if (piece && piece.startsWith(myColor)) setSelected(id);
     } else {
-      if (id === selected) {
-        setSelected(null); // Désélection
-      } else {
-        // Envoie toujours les deux positions, le moteur décide de l'action
-        // Cela gère le déplacement simple, l'élan, et les deux types de poussée
-        moves.playAction(selected, id); 
-        setSelected(null); // Le tour s'arrête ici après l'action validée
-      }
+      moves.playAction(selected, id);
+      setSelected(null);
     }
   };
 
-  return (
-    <div style={{ textAlign: 'center', padding: '20px', fontFamily: 'sans-serif' }}>
-      <h1>La Poussette V3</h1>
-      <h3 style={{ color: ctx.currentPlayer === '0' ? '#333' : '#666', borderBottom: '2px solid' + (ctx.currentPlayer === '0' ? '#fff' : '#000') }}>
-        Tour : {ctx.currentPlayer === '0' ? 'Blancs (⚪)' : 'Noirs (⚫)'}
-      </h3>
-      
-      <div style={{ marginBottom: '15px' }}>
-        <button onClick={() => setActionMode('move')} style={{
-          padding: '10px 20px', fontSize: '16px', borderRadius: '8px', cursor: 'pointer', border: '1px solid #333',
-          backgroundColor: actionMode === 'move' ? '#ffeb3b' : '#eee', // Jaune si sélectionné
-          fontWeight: actionMode === 'move' ? 'bold' : 'normal',
-        }}>
-          🕹️ Déplacer / Pousser
-        </button>
-        <button onClick={() => setActionMode('compress')} style={{
-          padding: '10px 20px', fontSize: '16px', borderRadius: '8px', cursor: 'pointer', marginLeft: '10px', border: '1px solid #333',
-          backgroundColor: actionMode === 'compress' ? '#ffeb3b' : '#eee', // Jaune si sélectionné
-          fontWeight: actionMode === 'compress' ? 'bold' : 'normal',
-        }}>
-          💥 Compresser
-        </button>
-      </div>
+  // --- STYLES ---
+  const boardStyle = {
+    display: 'grid',
+    gridTemplateColumns: '40px repeat(5, 80px)',
+    gridTemplateRows: 'repeat(5, 80px) 40px',
+    margin: '10px auto',
+    width: 'fit-content',
+    backgroundColor: '#fff',
+    userSelect: 'none'
+  };
 
-      <div style={{ display: 'inline-block', border: '5px solid #444', borderRadius: '4px', backgroundColor: '#bbb', boxShadow: '0 4px 8px rgba(0,0,0,0.3)' }}>
-        {Array(5).fill().map((_, i) => (
-          <div key={4-i} style={{ display: 'flex' }}>
-            {Array(5).fill().map((_, j) => {
-              const id = 5 * (4-i) + j;
-              const isSelected = selected === id;
-              const cellValue = G.cells[id];
-              const isPromoted = cellValue && cellValue.includes('P');
+  const clockStyle = (playerIndex) => {
+    const isActive = ctx.currentPlayer === String(playerIndex);
+    return {
+      padding: '10px 20px',
+      fontSize: '28px',
+      fontWeight: 'bold',
+      borderRadius: '8px',
+      backgroundColor: isActive ? '#2c3e50' : '#f8f9fa',
+      color: isActive ? '#fff' : '#adb5bd',
+      border: isActive ? '2px solid #3498db' : '2px solid #dee2e6',
+      minWidth: '100px',
+      textAlign: 'center',
+      margin: '10px 0',
+      transition: 'all 0.2s'
+    };
+  };
 
-              return (
-                <div key={id} onClick={() => onClick(id)} style={{
-                  width: '75px', height: '75px', border: '1px solid #666',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '50px', cursor: 'pointer', position: 'relative',
-                  backgroundColor: isSelected ? '#fff3cd' : ((id + (4-i)) % 2 === 0 ? '#eee' : '#ddd') // Damier
-                }}>
-                  {cellValue && (cellValue.startsWith('B') ? '⚪' : '⚫')}
-                  
-                  {/* ÉTOILE CENTRÉE ET JAUNE (GOLD) */}
-                  {isPromoted && 
-                    <span style={{
-                      position:'absolute', 
-                      fontSize:'28px', 
-                      color:'gold', // Jaune
-                      top: '50%', // Centré verticalement
-                      left: '50%', // Centré horizontalement
-                      transform: 'translate(-50%, -50%)', // Ajustement exact au centre
-                      pointerEvents: 'none', // Clique au travers de l'étoile
-                    }}>⭐</span>
-                  }
-                </div>
-              );
-            })}
+  const renderPiece = (p) => {
+    if (!p) return null;
+    const star = { position: 'absolute', fontSize: '20px', color: '#f1c40f', textShadow: '0 0 2px black' };
+    if (p === 'B') return <span>⚪</span>;
+    if (p === 'N') return <span>⚫</span>;
+    if (p === 'BP') return <div style={{display:'flex', alignItems:'center', justifyContent:'center'}}><span>⚪</span><span style={star}>⭐</span></div>;
+    if (p === 'NP') return <div style={{display:'flex', alignItems:'center', justifyContent:'center'}}><span>⚫</span><span style={star}>⭐</span></div>;
+    return null;
+  };
+
+  const renderBoard = () => {
+    let board = [];
+    const rowOrder = isFlipped ? [0, 1, 2, 3, 4] : [4, 3, 2, 1, 0];
+    const colOrder = isFlipped ? [4, 3, 2, 1, 0] : [0, 1, 2, 3, 4];
+    rowOrder.forEach(r => {
+      board.push(<div key={`l-${r}`} style={{display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'bold'}}>{r + 1}</div>);
+      colOrder.forEach(c => {
+        const id = r * 5 + c;
+        board.push(
+          <div key={id} onClick={() => onClick(id)} style={{
+            width: '80px', height: '80px', border: '1px solid #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            boxShadow: selected === id ? 'inset 0 0 0 4px #3498db' : 'none', fontSize: '45px', backgroundColor: '#fff'
+          }}>
+            {renderPiece(G.cells[id])}
           </div>
-        ))}
+        );
+      });
+    });
+    board.push(<div key="empty" />);
+    colOrder.forEach(c => board.push(<div key={`b-${c}`} style={{display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'bold'}}>{['A','B','C','D','E'][c]}</div>));
+    return board;
+  };
+
+  return (
+    <div style={{ backgroundColor: '#fff', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+      
+      {/* Chrono Adversaire */}
+      <div style={clockStyle(isFlipped ? 0 : 1)}>
+        {formatTime(localTimes[isFlipped ? 0 : 1])}
       </div>
-      {ctx.gameover && <div style={{marginTop: '20px', fontSize: '28px', color: '#27ae60', fontWeight: 'bold', padding: '10px', backgroundColor: '#e9f7ef', borderRadius: '8px'}}>🏆 Victoire : {ctx.gameover.winner} !</div>}
+
+      <div style={boardStyle}>
+        {renderBoard()}
+      </div>
+
+      {/* Ton Chrono */}
+      <div style={clockStyle(isFlipped ? 1 : 0)}>
+        {formatTime(localTimes[isFlipped ? 1 : 0])}
+      </div>
+
+      {ctx.gameover && (
+        <div style={{marginTop: '20px', padding: '15px', backgroundColor: '#27ae60', color: '#fff', borderRadius: '8px', fontSize: '20px'}}>
+          Victoire : {ctx.gameover.winner} !
+        </div>
+      )}
     </div>
   );
-}
+};
