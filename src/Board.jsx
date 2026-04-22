@@ -4,21 +4,16 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
   const [selected, setSelected] = useState(null);
   const isFlipped = playerID === '1'; 
 
-  // --- LOGIQUE DU TIMER VISUEL ---
-  // Initialisation sécurisée
   const [localTimes, setLocalTimes] = useState(G.timer || [600, 600]);
 
   useEffect(() => {
-    // Dès que le serveur envoie un nouveau G.timer, on écrase le temps local
-    if (G.timer) {
-      setLocalTimes([...G.timer]);
-    }
+    if (G.timer) setLocalTimes([...G.timer]);
   }, [G.timer]);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setLocalTimes(prev => {
-        if (!prev) return [600, 600];
+        if (!prev || !G.gameStarted) return prev;
         const newTimes = [...prev];
         const active = parseInt(ctx.currentPlayer);
         if (newTimes[active] > 0 && !ctx.gameover) {
@@ -27,9 +22,8 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
         return newTimes;
       });
     }, 1000);
-    
     return () => clearInterval(interval);
-  }, [ctx.currentPlayer, ctx.gameover]);
+  }, [ctx.currentPlayer, ctx.gameover, G.gameStarted]);
 
   const formatTime = (seconds) => {
     if (isNaN(seconds) || seconds === null) return "10:00";
@@ -39,42 +33,26 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
   };
 
   const onClick = (id) => {
+    const piece = G.cells[id];
+    const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
+    const opponentColor = ctx.currentPlayer === '0' ? 'N' : 'B';
+
     if (selected === null) {
-      const piece = G.cells[id];
-      const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
-      if (piece && piece.startsWith(myColor)) setSelected(id);
+      // 1. Cliquer sur son pion pour le sélectionner
+      if (piece && piece.startsWith(myColor)) {
+        setSelected(id);
+      } 
+      // 2. Cliquer sur un pion adverse pour tenter une COMPRESSION
+      else if (piece && piece.startsWith(opponentColor)) {
+        moves.compressPion(id);
+      }
     } else {
-      moves.playAction(selected, id);
+      // 3. Cliquer ailleurs pour déplacer le pion sélectionné
+      if (selected !== id) {
+        moves.playAction(selected, id);
+      }
       setSelected(null);
     }
-  };
-
-  // --- STYLES ---
-  const boardStyle = {
-    display: 'grid',
-    gridTemplateColumns: '40px repeat(5, 80px)',
-    gridTemplateRows: 'repeat(5, 80px) 40px',
-    margin: '10px auto',
-    width: 'fit-content',
-    backgroundColor: '#fff',
-    userSelect: 'none'
-  };
-
-  const clockStyle = (playerIndex) => {
-    const isActive = ctx.currentPlayer === String(playerIndex);
-    return {
-      padding: '10px 20px',
-      fontSize: '28px',
-      fontWeight: 'bold',
-      borderRadius: '8px',
-      backgroundColor: isActive ? '#2c3e50' : '#f8f9fa',
-      color: isActive ? '#fff' : '#adb5bd',
-      border: isActive ? '2px solid #3498db' : '2px solid #dee2e6',
-      minWidth: '100px',
-      textAlign: 'center',
-      margin: '10px 0',
-      transition: 'all 0.2s'
-    };
   };
 
   const renderPiece = (p) => {
@@ -112,19 +90,20 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
 
   return (
     <div style={{ backgroundColor: '#fff', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      
-      {/* Chrono Adversaire */}
-      <div style={clockStyle(isFlipped ? 0 : 1)}>
+      <div style={{ padding: '10px 20px', fontSize: '28px', fontWeight: 'bold', borderRadius: '8px', backgroundColor: ctx.currentPlayer === (isFlipped ? '0' : '1') ? '#2c3e50' : '#f8f9fa', color: ctx.currentPlayer === (isFlipped ? '0' : '1') ? '#fff' : '#adb5bd', border: '2px solid #dee2e6', minWidth: '100px', textAlign: 'center', margin: '10px 0' }}>
         {formatTime(localTimes[isFlipped ? 0 : 1])}
       </div>
 
-      <div style={boardStyle}>
+      <div style={{ display: 'grid', gridTemplateColumns: '40px repeat(5, 80px)', gridTemplateRows: 'repeat(5, 80px) 40px', margin: '10px auto', backgroundColor: '#fff', userSelect: 'none' }}>
         {renderBoard()}
       </div>
 
-      {/* Ton Chrono */}
-      <div style={clockStyle(isFlipped ? 1 : 0)}>
+      <div style={{ padding: '10px 20px', fontSize: '28px', fontWeight: 'bold', borderRadius: '8px', backgroundColor: ctx.currentPlayer === (isFlipped ? '1' : '0') ? '#2c3e50' : '#f8f9fa', color: ctx.currentPlayer === (isFlipped ? '1' : '0') ? '#fff' : '#adb5bd', border: '2px solid #dee2e6', minWidth: '100px', textAlign: 'center', margin: '10px 0' }}>
         {formatTime(localTimes[isFlipped ? 1 : 0])}
+      </div>
+
+      <div style={{marginTop: '10px', color: '#7f8c8d', fontStyle: 'italic'}}>
+        Astuce : Cliquez sur un pion adverse entouré pour le capturer !
       </div>
 
       {ctx.gameover && (
