@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 export const PousseBoard = ({ ctx, G, moves, playerID }) => {
   const [selected, setSelected] = useState(null);
+  const [isCompressMode, setIsCompressMode] = useState(false); // <-- L'interrupteur
   const isFlipped = playerID === '1'; 
 
   const [localTimes, setLocalTimes] = useState(G.timer || [600, 600]);
@@ -34,20 +35,23 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
 
   const onClick = (id) => {
     const piece = G.cells[id];
-    const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
     const opponentColor = ctx.currentPlayer === '0' ? 'N' : 'B';
 
-    if (selected === null) {
-      // 1. Cliquer sur son pion pour le sélectionner
-      if (piece && piece.startsWith(myColor)) {
-        setSelected(id);
-      } 
-      // 2. Cliquer sur un pion adverse pour tenter une COMPRESSION
-      else if (piece && piece.startsWith(opponentColor)) {
+    // SI LE MODE COMPRESSION EST ACTIVÉ
+    if (isCompressMode) {
+      if (piece && piece.startsWith(opponentColor)) {
         moves.compressPion(id);
       }
+      setIsCompressMode(false); // On éteint le mode après le clic
+      setSelected(null);
+      return;
+    }
+
+    // MODE NORMAL (Déplacement)
+    if (selected === null) {
+      const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
+      if (piece && piece.startsWith(myColor)) setSelected(id);
     } else {
-      // 3. Cliquer ailleurs pour déplacer le pion sélectionné
       if (selected !== id) {
         moves.playAction(selected, id);
       }
@@ -76,7 +80,8 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
         board.push(
           <div key={id} onClick={() => onClick(id)} style={{
             width: '80px', height: '80px', border: '1px solid #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-            boxShadow: selected === id ? 'inset 0 0 0 4px #3498db' : 'none', fontSize: '45px', backgroundColor: '#fff'
+            boxShadow: selected === id ? 'inset 0 0 0 4px #3498db' : (isCompressMode ? 'inset 0 0 0 4px #e74c3c' : 'none'), 
+            fontSize: '45px', backgroundColor: '#fff'
           }}>
             {renderPiece(G.cells[id])}
           </div>
@@ -90,6 +95,7 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
 
   return (
     <div style={{ backgroundColor: '#fff', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px', fontFamily: 'Arial, sans-serif' }}>
+      
       <div style={{ padding: '10px 20px', fontSize: '28px', fontWeight: 'bold', borderRadius: '8px', backgroundColor: ctx.currentPlayer === (isFlipped ? '0' : '1') ? '#2c3e50' : '#f8f9fa', color: ctx.currentPlayer === (isFlipped ? '0' : '1') ? '#fff' : '#adb5bd', border: '2px solid #dee2e6', minWidth: '100px', textAlign: 'center', margin: '10px 0' }}>
         {formatTime(localTimes[isFlipped ? 0 : 1])}
       </div>
@@ -102,9 +108,26 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
         {formatTime(localTimes[isFlipped ? 1 : 0])}
       </div>
 
-      <div style={{marginTop: '10px', color: '#7f8c8d', fontStyle: 'italic'}}>
-        Astuce : Cliquez sur un pion adverse entouré pour le capturer !
-      </div>
+      {/* LE BOUTON COMPRESSION */}
+      <button 
+        onClick={() => {
+          setIsCompressMode(!isCompressMode);
+          setSelected(null);
+        }}
+        style={{
+          marginTop: '20px',
+          padding: '15px 30px',
+          fontSize: '18px',
+          fontWeight: 'bold',
+          backgroundColor: isCompressMode ? '#e74c3c' : '#34495e',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          cursor: 'pointer'
+        }}
+      >
+        {isCompressMode ? "ANNULER COMPRESSION" : "💥 COMPRESSION"}
+      </button>
 
       {ctx.gameover && (
         <div style={{marginTop: '20px', padding: '15px', backgroundColor: '#27ae60', color: '#fff', borderRadius: '8px', fontSize: '20px'}}>
