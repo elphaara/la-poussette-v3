@@ -79,7 +79,7 @@ export const PousseJeu = {
 
       if (G.history && nextCells.every((val, index) => val === G.history[index])) return INVALID_MOVE;
 
-      // --- TIMER +5s ---
+      // LOGIQUE DU TIMER
       if (!G.gameStarted) {
         G.gameStarted = true;
         G.timer[player] += 5;
@@ -96,7 +96,11 @@ export const PousseJeu = {
     compressPion: ({ G, ctx }, victimPos) => {
       const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
       if (!isCompressed(G, victimPos, myColor)) return INVALID_MOVE;
+      
+      // Si compressé, on retire le pion et on ajoute 5s de bonus
       G.cells[victimPos] = null;
+      const player = parseInt(ctx.currentPlayer);
+      G.timer[player] += 5;
     }
   },
 
