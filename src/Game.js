@@ -302,8 +302,21 @@ export const PousseJeu = {
   }),
 
   turn: {
-    minMoves: 1,
-    maxMoves: 1,
+    // NB : pas de minMoves/maxMoves ici, volontairement. Avec maxMoves: 1,
+    // boardgame.io termine automatiquement le tour dès que UN move est joué
+    // — y compris playAction quand celui-ci amène un pion sur sa ligne de
+    // promotion et laisse G.pendingPromotion en attente. Le tour passait
+    // alors à l'adversaire AVANT que choosePromotion ait pu être joué par
+    // le bon joueur, ce qui affichait le dialogue de promotion chez le
+    // mauvais joueur (qui ne pouvait évidemment pas cliquer dessus, son
+    // move étant rejeté car ce n'était plus son tour).
+    //
+    // La fin de tour est désormais entièrement pilotée à la main via
+    // events.endTurn() dans finalizeTurn() : un coup normal (move/push/
+    // compression) termine le tour immédiatement, mais un coup qui
+    // déclenche une promotion laisse le tour ouvert pour que le MÊME
+    // joueur puisse ensuite jouer choosePromotion avant que la main ne
+    // passe à l'adversaire.
     onBegin: ({ G }) => {
       if (G.gameStarted) G.lastTimestamp = Date.now();
       G.preMoveState = G.cells.slice();
@@ -402,7 +415,7 @@ export const PousseJeu = {
       finalizeTurn(G, ctx, events);
     },
 
-    compressPion: ({ G, ctx }, targetPos) => {
+    compressPion: ({ G, ctx, events }, targetPos) => {
       if (G.pendingPromotion) return INVALID_MOVE;
 
       const myColor = ctx.currentPlayer === '0' ? 'B' : 'N';
@@ -413,7 +426,15 @@ export const PousseJeu = {
       G.cells = nextCells;
 
       updateTimer(G, ctx, parseInt(ctx.currentPlayer, 10));
+
+      // Une compression ne déclenche jamais de promotion (elle ne fait que
+      // retirer un pion), donc le tour se termine toujours immédiatement
+      // après — sauf si la partie est déjà terminée (élimination/nul/
+      // victoire astrale détectés dans finalizeTurnAfterAction).
       finalizeTurnAfterAction(G, ctx);
+      if (!G.gameWinner && !G.gameDraw) {
+        events.endTurn();
+      }
     },
   },
 
