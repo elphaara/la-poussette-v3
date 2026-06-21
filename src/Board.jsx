@@ -2,21 +2,21 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { actionsForPiece } from './Game.js';
 
 // =============================================================================
-// Palette inspirée du thème sombre par défaut de Spyder (éditeur Python) :
-// fond anthracite/bleu très foncé, panneaux légèrement plus clairs, accents
-// bleus, texte clair à faible contraste dur (évite le blanc pur agressif).
+// Palette : fond/panneaux en thème sombre Spyder, damier en beige/marron
+// classique d'échiquier, pièces noir/blanc, case de victoire astrale en or
+// (tranche nettement sur le marron, contrairement à l'ancien kaki).
 // =============================================================================
 const THEME = {
   bg: '#19232D',          // fond principal (identique à l'éditeur Spyder)
   panel: '#232B35',       // panneaux / cartouches (timers, légende)
   panelBorder: '#3A4452',
-  cellLight: '#2B3543',   // case claire du damier
-  cellDark: '#232B35',    // case sombre du damier
+  cellLight: '#E8C9A0',   // case claire du damier — beige bois clair
+  cellDark: '#8B5A2B',    // case sombre du damier — marron bois foncé
   cellSelected: '#2E5C8A',     // case du pion sélectionné
   cellValidMove: '#3D7A4A',    // case de destination valide (déplacement)
-  cellValidPush: '#8A5A2E',    // case de destination valide (poussée, distincte du déplacement simple)
+  cellValidPush: '#C9701E',    // case de destination valide (poussée, distincte du déplacement simple)
   cellCompressTarget: '#7A2E2E',
-  astralTarget: '#5C5424',
+  astralTarget: '#FFB300',     // case de victoire astrale — or saturé, tranche nettement sur le beige/marron
   text: '#DFE1E2',
   textMuted: '#8A94A3',
   accent: '#2DA0F2',
@@ -282,7 +282,7 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
       )}
 
       {pendingPromotion && !isMyTurn && (
-        <div style={{ marginTop: '16px', padding: '10px 18px', background: THEME.astralTarget, borderRadius: '8px', color: THEME.text }}>
+        <div style={{ marginTop: '16px', padding: '10px 18px', background: THEME.astralTarget, borderRadius: '8px', color: '#1a1a1a' }}>
           En attente du choix de promotion de l'adversaire…
         </div>
       )}
