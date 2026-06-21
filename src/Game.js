@@ -496,3 +496,12 @@ function finalizeTurnAfterAction(G, ctx) {
     G.gameWinner = astralWinner;
   }
 }
+
+// -----------------------------------------------------------------------
+// Exports supplémentaires pour le client (Board.jsx) : permettent d'afficher
+// les coups légaux d'une pièce sélectionnée (surlignage des cases valides)
+// sans dupliquer la logique de règles côté composant React. Le serveur
+// reste seul juge de la validité réelle d'un coup via moves.playAction ;
+// ces exports ne servent qu'à l'affichage indicatif côté client.
+// -----------------------------------------------------------------------
+export { actionsForPiece, isValidCompression };
