@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { actionsForPiece } from './Game.js';
-import { chooseMCTSAction, chooseMCTSPromotion } from './AIPlayer.js';
 
 const THEME = {
   bg: '#19232D',
@@ -67,38 +66,6 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
   const [isCompressMode, setIsCompressMode] = useState(false);
   const isFlipped = playerID === '1';
 
-  const [aiColor, setAiColor] = useState(null);
-  const [aiThinking, setAiThinking] = useState(false);
-  const aiRunning = useRef(false);
-
-  useEffect(() => {
-    if (!aiColor) return;
-    if (ctx.gameover) return;
-    if (ctx.currentPlayer !== aiColor) return;
-    if (G.pendingPromotion) {
-      const pos = G.pendingPromotion.position;
-      const type = chooseMCTSPromotion(G.cells, pos, aiColor);
-      moves.choosePromotion(type);
-      return;
-    }
-    if (aiRunning.current) return;
-    aiRunning.current = true;
-    setAiThinking(true);
-    setSelected(null);
-    setTimeout(() => {
-      try {
-        const action = chooseMCTSAction(G.cells, G.history, aiColor, 3500);
-        if (action) {
-          if (action.kind === 'playAction') moves.playAction(action.from, action.to);
-          if (action.kind === 'compressPion') moves.compressPion(action.target);
-        }
-      } finally {
-        aiRunning.current = false;
-        setAiThinking(false);
-      }
-    }, 50);
-  }, [aiColor, ctx.currentPlayer, ctx.gameover, G.cells, G.pendingPromotion]);
-
   const [localTimes, setLocalTimes] = useState(G.timer || [600, 600]);
 
   useEffect(() => {
@@ -126,7 +93,6 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
 
   const isMyTurn = ctx.currentPlayer === playerID;
   const pendingPromotion = G.pendingPromotion;
-  const humanCanPlay = isMyTurn && !pendingPromotion && ctx.currentPlayer !== aiColor;
 
   const legalActionsForSelected = useMemo(() => {
     if (selected === null || isCompressMode) return [];
@@ -143,7 +109,7 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
   );
 
   const onClick = (id) => {
-    if (!humanCanPlay) return;
+    if (!isMyTurn || pendingPromotion) return;
     const piece = G.cells[id];
     const opponentColor = ctx.currentPlayer === '0' ? 'N' : 'B';
     if (isCompressMode) {
@@ -185,7 +151,7 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
               else if (isAstralTargetCell) backgroundColor = THEME.astralTarget;
               else backgroundColor = (r + c) % 2 === 0 ? THEME.cellLight : THEME.cellDark;
               return (
-                <div key={id} onClick={() => onClick(id)} style={{ width: '80px', height: '80px', border: `1px solid ${THEME.panelBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: humanCanPlay ? 'pointer' : 'default', backgroundColor, transition: 'background-color 0.12s ease', boxShadow: isCompressMode ? `inset 0 0 0 3px ${THEME.cellCompressTarget}` : 'none' }}>
+                <div key={id} onClick={() => onClick(id)} style={{ width: '80px', height: '80px', border: `1px solid ${THEME.panelBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isMyTurn && !pendingPromotion ? 'pointer' : 'default', backgroundColor, transition: 'background-color 0.12s ease', boxShadow: isCompressMode ? `inset 0 0 0 3px ${THEME.cellCompressTarget}` : 'none' }}>
                   <Piece piece={G.cells[id]} />
                 </div>
               );
@@ -202,7 +168,7 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
         {formatTime(localTimes[isFlipped ? 1 : 0])}
       </div>
 
-      <button onClick={() => { setIsCompressMode(!isCompressMode); setSelected(null); }} disabled={!humanCanPlay} style={{ marginTop: '20px', padding: '15px 30px', fontSize: '18px', fontWeight: 'bold', backgroundColor: isCompressMode ? THEME.accentDanger : THEME.panel, color: THEME.text, border: `1px solid ${THEME.panelBorder}`, borderRadius: '8px', cursor: humanCanPlay ? 'pointer' : 'not-allowed', opacity: humanCanPlay ? 1 : 0.5 }}>
+      <button onClick={() => { setIsCompressMode(!isCompressMode); setSelected(null); }} disabled={!isMyTurn || !!pendingPromotion} style={{ marginTop: '20px', padding: '15px 30px', fontSize: '18px', fontWeight: 'bold', backgroundColor: isCompressMode ? THEME.accentDanger : THEME.panel, color: THEME.text, border: `1px solid ${THEME.panelBorder}`, borderRadius: '8px', cursor: (isMyTurn && !pendingPromotion) ? 'pointer' : 'not-allowed', opacity: (isMyTurn && !pendingPromotion) ? 1 : 0.5 }}>
         {isCompressMode ? 'ANNULER COMPRESSION' : '💥 COMPRESSION'}
       </button>
 
@@ -211,21 +177,6 @@ export const PousseBoard = ({ ctx, G, moves, playerID }) => {
         <br />
         <span style={{ color: THEME.cellValidMove }}>■</span> case de déplacement &nbsp;
         <span style={{ color: THEME.cellValidPush }}>■</span> case de poussée
-      </div>
-
-      <div style={{ marginTop: '12px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <button
-          onClick={() => {
-            if (aiColor) { setAiColor(null); setAiThinking(false); aiRunning.current = false; }
-            else { setAiColor(playerID === '0' ? '1' : '0'); }
-          }}
-          style={{ padding: '10px 20px', fontSize: '15px', fontWeight: 'bold', backgroundColor: aiColor ? THEME.accentDanger : THEME.panel, color: THEME.text, border: `1px solid ${THEME.panelBorder}`, borderRadius: '8px', cursor: 'pointer' }}
-        >
-          {aiColor ? "🤖 Désactiver l'IA" : "🤖 Jouer contre l'IA"}
-        </button>
-        {aiThinking && (
-          <span style={{ color: THEME.accent, fontSize: '14px', fontStyle: 'italic' }}>IA réfléchit…</span>
-        )}
       </div>
 
       {pendingPromotion && isMyTurn && (
